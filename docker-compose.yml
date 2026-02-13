@@ -1,0 +1,120 @@
+services:
+  clickstack:
+    image: docker.io/clickhouse/clickstack-all-in-one:2.21.0
+    ports:
+      - "8080:8080"   # ClickStack UI
+      - "18123:8123"  # ClickHouse HTTP (Play UI)
+      - "4317:4317"   # OTel gRPC (included but unused by our sink)
+      - "4318:4318"   # OTel HTTP
+    environment:
+      DEFAULT_SOURCES: '[{"name":"mylogs","kind":"log","connection":"Local ClickHouse","from":{"databaseName":"logs","tableName":"app_logs"},"timestampValueExpression":"timestamp","displayedTimestampValueExpression":"timestamp","defaultTableSelectExpression":"timestamp, level, message, properties","bodyExpression":"message","severityTextExpression":"level","serviceNameExpression":"ServiceName"}]'
+    volumes:
+      - ./clickstack/entry.sh:/etc/local/entry.sh:ro
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  init-db:
+    image: busybox
+    entrypoint: ["sh", "-c", "wget -qO- 'http://worker:worker@clickstack:8123/' --post-data='CREATE DATABASE IF NOT EXISTS logs' && echo 'Init complete'"]
+    depends_on:
+      clickstack:
+        condition: service_healthy
+
+  init-dashboard:
+    image: busybox
+    volumes:
+      - ./clickstack/dashboard.json:/dashboard.json:ro
+    entrypoint:
+      - sh
+      - -c
+      - |
+        echo 'Waiting for ClickStack API...'
+        n=0
+        while [ $$n -lt 30 ]; do
+          if wget -qO /dev/null http://clickstack:8000/health 2>/dev/null; then
+            break
+          fi
+          n=$$((n+1))
+          sleep 2
+        done
+
+        echo 'Looking up source ID for mylogs...'
+        n=0
+        SOURCE_ID=""
+        while [ $$n -lt 15 ]; do
+          SOURCES=$$(wget -qO- 'http://clickstack:8000/sources' 2>/dev/null)
+          SOURCE_ID=$$(echo "$$SOURCES" | sed 's/},{/}\n{/g' | grep '"name":"mylogs"' | sed 's/.*"_id":"\([^"]*\)".*/\1/')
+          if [ -n "$$SOURCE_ID" ]; then
+            break
+          fi
+          n=$$((n+1))
+          sleep 2
+        done
+
+        if [ -z "$$SOURCE_ID" ]; then
+          echo 'ERROR: Could not find source ID for mylogs'
+          exit 1
+        fi
+        echo "Found source ID: $$SOURCE_ID"
+
+        sed "s/\"source\": \"mylogs\"/\"source\": \"$$SOURCE_ID\"/g" /dashboard.json > /tmp/dashboard.json
+
+        echo 'Creating dashboard...'
+        wget --header='Content-Type: application/json' \
+             --post-file=/tmp/dashboard.json \
+             -qO- 'http://clickstack:8000/dashboards' \
+          && echo 'Dashboard created' \
+          || echo 'Dashboard creation failed'
+    depends_on:
+      clickstack:
+        condition: service_healthy
+
+  seed-data:
+    image: busybox
+    entrypoint:
+      - sh
+      - -c
+      - |
+        echo 'Waiting for Demo API...'
+        n=0
+        while [ $$n -lt 30 ]; do
+          if wget -qO /dev/null http://demo-api:8080/health 2>/dev/null; then
+            break
+          fi
+          n=$$((n+1))
+          sleep 2
+        done
+        echo 'Generating traffic...'
+        wget -qO- -T 60 --post-data='' 'http://demo-api:8080/generate-traffic' \
+          && echo 'Traffic generated' \
+          || echo 'Traffic generation failed'
+    depends_on:
+      clickstack:
+        condition: service_healthy
+      init-db:
+        condition: service_completed_successfully
+
+  demo-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5000:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ClickHouse__ConnectionString=Host=clickstack;Port=8123;Database=logs;Username=worker;Password=worker
+    depends_on:
+      clickstack:
+        condition: service_healthy
+      init-db:
+        condition: service_completed_successfully
+
+volumes:
+  clickhouse_data:
+  clickhouse_logs:

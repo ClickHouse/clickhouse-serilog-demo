@@ -1,0 +1,162 @@
+{
+  "version": "0.1.0",
+  "name": "DemoApi Logs",
+  "tiles": [
+    {
+      "id": "7o3oh",
+      "x": 0,
+      "y": 0,
+      "w": 12,
+      "h": 10,
+      "config": {
+        "name": "Error Rate",
+        "source": "mylogs",
+        "displayType": "stacked_bar",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 2,
+          "thousandSeparated": true,
+          "average": false,
+          "decimalBytes": false,
+          "factor": 1
+        },
+        "granularity": "auto",
+        "fillNulls": 0,
+        "compareToPreviousPeriod": false,
+        "alignDateRangeToGranularity": true,
+        "select": [
+          {
+            "aggFn": "none",
+            "aggCondition": "",
+            "aggConditionLanguage": "lucene",
+            "valueExpression": "countIf(level='Error') / count()",
+            "alias": "Error rate"
+          }
+        ],
+        "where": "",
+        "whereLanguage": "lucene"
+      }
+    },
+    {
+      "id": "1hxj8l",
+      "x": 12,
+      "y": 0,
+      "w": 12,
+      "h": 10,
+      "config": {
+        "name": "Log Volume by Level",
+        "source": "mylogs",
+        "displayType": "stacked_bar",
+        "granularity": "auto",
+        "alignDateRangeToGranularity": true,
+        "select": [
+          {
+            "aggFn": "count",
+            "aggCondition": "",
+            "aggConditionLanguage": "lucene",
+            "valueExpression": ""
+          }
+        ],
+        "where": "",
+        "whereLanguage": "lucene",
+        "groupBy": "level"
+      }
+    },
+    {
+      "id": "13y1y4",
+      "x": 0,
+      "y": 10,
+      "w": 12,
+      "h": 10,
+      "config": {
+        "name": "Response Time",
+        "source": "mylogs",
+        "displayType": "line",
+        "numberFormat": {
+          "output": "time",
+          "mantissa": 2,
+          "thousandSeparated": true,
+          "average": false,
+          "decimalBytes": false,
+          "factor": 0.001
+        },
+        "granularity": "auto",
+        "fillNulls": 0,
+        "compareToPreviousPeriod": false,
+        "alignDateRangeToGranularity": true,
+        "select": [
+          {
+            "aggFn": "quantile",
+            "aggCondition": "",
+            "aggConditionLanguage": "lucene",
+            "valueExpression": "properties.Elapsed",
+            "alias": "p50",
+            "level": 0.5
+          },
+          {
+            "aggFn": "quantile",
+            "aggCondition": "",
+            "aggConditionLanguage": "lucene",
+            "valueExpression": "properties.Elapsed",
+            "alias": "p95",
+            "level": 0.95
+          },
+          {
+            "aggFn": "quantile",
+            "aggCondition": "",
+            "aggConditionLanguage": "lucene",
+            "valueExpression": "properties.Elapsed",
+            "alias": "p99",
+            "level": 0.99
+          }
+        ],
+        "where": "",
+        "whereLanguage": "lucene"
+      }
+    },
+    {
+      "id": "1eyxp0",
+      "x": 12,
+      "y": 10,
+      "w": 12,
+      "h": 10,
+      "config": {
+        "name": "Requests by Endpoint",
+        "source": "mylogs",
+        "displayType": "stacked_bar",
+        "granularity": "auto",
+        "alignDateRangeToGranularity": true,
+        "select": [
+          {
+            "aggFn": "count",
+            "aggCondition": "",
+            "aggConditionLanguage": "lucene",
+            "valueExpression": ""
+          }
+        ],
+        "where": "",
+        "whereLanguage": "lucene",
+        "groupBy": "RequestPath"
+      }
+    },
+    {
+      "id": "1706a2",
+      "x": 0,
+      "y": 20,
+      "w": 24,
+      "h": 5,
+      "config": {
+        "name": "Warnings and Errors",
+        "source": "mylogs",
+        "displayType": "search",
+        "granularity": "auto",
+        "alignDateRangeToGranularity": true,
+        "select": "timestamp, level, message",
+        "where": "(level:\"Warning\" OR level:\"Error\")",
+        "whereLanguage": "lucene"
+      }
+    }
+  ],
+  "filters": [],
+  "tags": []
+}
